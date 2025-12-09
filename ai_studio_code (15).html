@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RadioWave Tools | SSTV & Decoder</title>
+    <style>
+        :root {
+            --primary: #00ff9d;
+            --secondary: #00b8ff;
+            --bg: #121212;
+            --surface: #1e1e1e;
+            --text: #e0e0e0;
+            --danger: #ff4757;
+            --terminal-bg: #0a0a0a;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        body { background-color: var(--bg); color: var(--text); overflow-x: hidden; }
+
+        /* Navigation */
+        nav {
+            background: var(--surface);
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 2px solid var(--primary);
+            box-shadow: 0 0 15px rgba(0, 255, 157, 0.2);
+        }
+
+        .logo { font-size: 1.5rem; font-weight: bold; color: var(--primary); letter-spacing: 2px; }
+        
+        .hamburger {
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .line { width: 30px; height: 3px; background: var(--text); transition: 0.3s; }
+
+        .menu-overlay {
+            position: fixed;
+            top: 60px;
+            right: -100%;
+            width: 250px;
+            height: calc(100vh - 60px);
+            background: var(--surface);
+            transition: 0.3s;
+            display: flex;
+            flex-direction: column;
+            padding: 2rem;
+            border-left: 1px solid var(--secondary);
+            z-index: 99;
+        }
+
+        .menu-overlay.active { right: 0; }
+
+        .menu-item {
+            color: var(--text);
+            text-decoration: none;
+            font-size: 1.2rem;
+            margin-bottom: 1.5rem;
+            cursor: pointer;
+            transition: 0.2s;
+            display: block;
+        }
+
+        .menu-item:hover { color: var(--primary); padding-left: 10px; }
+
+        /* Sections */
+        section { display: none; padding: 2rem; max-width: 800px; margin: 0 auto; animation: fadeIn 0.5s; }
+        section.active { display: block; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        h1, h2 { color: var(--secondary); margin-bottom: 1rem; }
+        p { line-height: 1.6; margin-bottom: 1rem; color: #aaa; }
+
+        /* UI Elements */
+        .card {
+            background: #252525;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            border: 1px solid #333;
+        }
+
+        .control-group { margin-bottom: 1rem; }
+        
+        label { display: block; margin-bottom: 0.5rem; color: var(--primary); font-size: 0.9rem; }
+        
+        select, input[type="text"], input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            background: #333;
+            border: 1px solid #444;
+            color: white;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        /* Specialized Inputs */
+        textarea.code-display {
+            width: 100%;
+            height: 80px;
+            background: var(--terminal-bg);
+            border: 1px solid var(--primary);
+            color: var(--primary);
+            font-family: 'Courier New', monospace;
+            padding: 10px;
+            margin-bottom: 10px;
+            resize: none;
+            font-size: 1.1rem;
+        }
+
+        button {
+            background: var(--primary);
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: 0.2s;
+            text-transform: uppercase;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        button:hover { background: var(--secondary); }
+        button.stop { background: var(--danger); color: white; }
+        button.copy-btn { background: #444; color: white; border: 1px solid #666; font-size: 0.8rem;}
+        button.copy-btn:hover { background: #666; }
+
+        /* SSTV Specific */
+        .sstv-display {
+            width: 100%;
+            height: 300px;
+            background: #000;
+            border: 2px solid var(--secondary);
+            margin-bottom: 1rem;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        canvas { max-width: 100%; max-height: 100%; }
+
+        /* Visualizer */
+        #spectrum { width: 100%; height: 100px; background: #000; margin-top: 10px; border-radius: 4px; border: 1px solid #333;}
+
+        /* Decoder Log */
+        .log-box {
+            font-family: 'Courier New', Courier, monospace;
+            background: #101010;
+            border: 1px solid var(--primary);
+            padding: 1rem;
+            height: 150px;
+            overflow-y: auto;
+            color: var(--primary);
+            font-size: 0.9rem;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- Navigation -->
+    <nav>
+        <div class="logo">RADIO<span style="color:white">TOOLS</span></div>
+        <div class="hamburger" onclick="toggleMenu()">
+            <div class="line"></div>
+            <div class="line"></div>
+            <div class="line"></div>
+        </div>
+    </nav>
+
+    <!-- Menu Overlay -->
+    <div class="menu-overlay" id="menu">
+        <a class="menu-item" onclick="navigate('home')">1. Home</a>
+        <a class="menu-item" onclick="navigate('sstv')">2. SSTV</a>
+        <a class="menu-item" onclick="navigate('decoder')">3. DECODER</a>
+    </div>
+
+    <!-- 1. HOME SECTION -->
+    <section id="home" class="active">
+        <h1>Welcome to RadioTools</h1>
+        <div class="card">
+            <h2>Instructions</h2>
+            <p>Select a tool from the menu.</p>
+            <ul>
+                <li><strong>SSTV:</strong> Transmit images over audio. Use "Robot72 (Clear)" for high-quality simulation.</li>
+                <li><strong>DECODER:</strong> Type text to generate Morse Code (Visual + Audio) or translate frequencies.</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- 2. SSTV SECTION -->
+    <section id="sstv">
+        <h1>SSTV | Slow Scan Television</h1>
+        
+        <!-- Transmitter -->
+        <div class="card">
+            <h2>Transmitter</h2>
+            <div class="control-group">
+                <label>Transmission Mode</label>
+                <select id="sstvMode">
+                    <option value="fast">Preview Mode (Fast/Low Res)</option>
+                    <option value="robot72">Robot 72 (Clear Image / Slow)</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label>Upload Image</label>
+                <input type="file" id="imageInput" accept="image/*">
+            </div>
+
+            <div class="sstv-display">
+                <canvas id="txCanvas"></canvas>
+            </div>
+            
+            <button onclick="startSSTVTransmit()" id="btnTx">Transmit Image</button>
+            <button onclick="stopAudio()" class="stop">Stop</button>
+        </div>
+
+        <!-- Receiver -->
+        <div class="card">
+            <h2>Receiver Spectrum</h2>
+            <canvas id="spectrum"></canvas>
+            <br><br>
+            <button onclick="startReceiver()">Start Listening</button>
+        </div>
+    </section>
+
+    <!-- 3. DECODER SECTION -->
+    <section id="decoder">
+        <h1>RF Decoder / Encoder</h1>
+
+        <!-- Encoder -->
+        <div class="card">
+            <h2>Encoder (Text to Morse)</h2>
+            <div class="control-group">
+                <label>Input Text</label>
+                <input type="text" id="encoderInput" placeholder="TYPE MESSAGE HERE..." onkeyup="previewMorse()">
+            </div>
+
+            <div class="control-group">
+                <label>Morse Code Output</label>
+                <textarea id="morseOutput" class="code-display" readonly placeholder=".- -... -.-."></textarea>
+                <button class="copy-btn" onclick="copyMorse()">Copy Morse Code</button>
+            </div>
+
+            <button onclick="playMorseAudio()">Transmit Audio</button>
+            <button onclick="stopAudio()" class="stop">Stop</button>
+        </div>
+
+        <!-- Decoder -->
+        <div class="card">
+            <h2>Frequency Translator</h2>
+            <div class="control-group">
+                <label>Received Data Log</label>
+                <div class="log-box" id="decoderLog">
+                    Waiting for signal...
+                </div>
+            </div>
+            <div class="control-group">
+                <label>Frequency Input (Hz)</label>
+                <input type="text" id="freqInput" placeholder="e.g., 7040">
+            </div>
+            <button onclick="translateFreq()">Translate</button>
+        </div>
+    </section>
+
+    <script>
+        // --- Navigation Logic ---
+        function toggleMenu() {
+            document.getElementById('menu').classList.toggle('active');
+        }
+
+        function navigate(sectionId) {
+            document.querySelectorAll('section').forEach(sec => sec.classList.remove('active'));
+            document.getElementById(sectionId).classList.add('active');
+            document.getElementById('menu').classList.remove('active');
+            stopAudio();
+        }
+
+        // --- Audio Core ---
+        let audioCtx;
+        let oscillator;
+        let gainNode;
+        let isPlaying = false;
+        let sstvInterval;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function stopAudio() {
+            if (oscillator) {
+                try { oscillator.stop(); } catch(e){}
+                oscillator = null;
+            }
+            if (sstvInterval) clearInterval(sstvInterval);
+            isPlaying = false;
+            document.getElementById('btnTx').innerText = "Transmit Image";
+        }
+
+        function playTone(freq, type = 'sine') {
+            if (oscillator) oscillator.stop();
+            oscillator = audioCtx.createOscillator();
+            gainNode = audioCtx.createGain();
+            
+            oscillator.type = type;
+            oscillator.frequency.value = freq;
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            oscillator.start();
+        }
+
+        // --- SSTV Logic ---
+        const imageInput = document.getElementById('imageInput');
+        const txCanvas = document.getElementById('txCanvas');
+        const ctx = txCanvas.getContext('2d');
+        let currentImageData = null;
+
+        imageInput.addEventListener('change', function(e) {
+            const reader = new FileReader();
+            reader.onload = function(event){
+                const img = new Image();
+                img.onload = function(){
+                    // Resize to standard SSTV resolution
+                    txCanvas.width = 320; 
+                    txCanvas.height = 240;
+                    ctx.drawImage(img, 0, 0, 320, 240);
+                    currentImageData = ctx.getImageData(0, 0, txCanvas.width, txCanvas.height);
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(e.target.files[0]);
+        });
+
+        function startSSTVTransmit() {
+            if(!currentImageData) {
+                alert("Please select an image first.");
+                return;
+            }
+            initAudio();
+            if (isPlaying) return;
+            isPlaying = true;
+            document.getElementById('btnTx').innerText = "Transmitting...";
+
+            const mode = document.getElementById('sstvMode').value;
+            
+            // Mode Configuration
+            let pixelSkip = 4; // Fast mode skips pixels
+            let scanSpeed = 10; // ms per update
+            
+            if (mode === 'robot72') {
+                // Clear Mode: No skipping, slower clearer scan
+                pixelSkip = 1; 
+                scanSpeed = 5; 
+            }
+
+            playTone(1900); // Sync pulse
+            
+            const data = currentImageData.data;
+            let i = 0;
+            const width = txCanvas.width;
+            
+            sstvInterval = setInterval(() => {
+                if (!isPlaying || i >= (data.length / 4)) {
+                    stopAudio();
+                    return;
+                }
+
+                // Get pixel brightness
+                const r = data[i*4];
+                const g = data[i*4 + 1];
+                const b = data[i*4 + 2];
+                const brightness = (r + g + b) / 3;
+
+                // Frequency Modulation (1500Hz black -> 2300Hz white)
+                const freq = 1500 + (brightness * 3.13); 
+                
+                if(oscillator) {
+                    oscillator.frequency.value = freq;
+                } else {
+                    playTone(freq, 'sawtooth');
+                }
+
+                // Visual Scanline Logic
+                const currentPixelIndex = i;
+                const x = currentPixelIndex % width;
+                const y = Math.floor(currentPixelIndex / width);
+
+                // Only redraw visual line every row to save CPU
+                if (x === 0) {
+                     // Redraw original image to clear previous red line
+                     ctx.putImageData(currentImageData, 0, 0);
+                     // Draw red scan line
+                     ctx.fillStyle = "#ff4757";
+                     ctx.fillRect(0, y, 320, 2);
+                }
+
+                // Increment
+                i += pixelSkip; 
+
+                // If in "Clear" mode, we simulate time passing by skipping less
+                // but we speed up the loop index slightly to keep web demo reasonable
+                if (mode === 'robot72') {
+                    // Jump a bit more to prevent it taking 10 minutes, 
+                    // but keep density high for audio simulation
+                    i += 2; 
+                } else {
+                    i += 10; // Fast preview
+                }
+
+            }, scanSpeed);
+        }
+
+        // --- Receiver Logic ---
+        function startReceiver() {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                const audioCtxRec = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioCtxRec.createMediaStreamSource(stream);
+                const analyser = audioCtxRec.createAnalyser();
+                
+                analyser.fftSize = 2048;
+                source.connect(analyser);
+
+                const canvas = document.getElementById('spectrum');
+                const canvasCtx = canvas.getContext('2d');
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+
+                function draw() {
+                    requestAnimationFrame(draw);
+                    analyser.getByteFrequencyData(dataArray);
+                    canvasCtx.fillStyle = '#000';
+                    canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    const barWidth = (canvas.width / bufferLength) * 2.5;
+                    let x = 0;
+
+                    for(let i = 0; i < bufferLength; i++) {
+                        const barHeight = dataArray[i] / 2;
+                        // Radio green color scheme
+                        canvasCtx.fillStyle = `rgb(0, ${barHeight + 100}, 157)`; 
+                        canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                        x += barWidth + 1;
+                    }
+                }
+                draw();
+            })
+            .catch(err => alert("Microphone access needed for Receiver."));
+        }
+
+        // --- Decoder / Encoder Logic ---
+        const morseCode = {
+            'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 'F': '..-.',
+            'G': '--.', 'H': '....', 'I': '..', 'J': '.---', 'K': '-.-', 'L': '.-..',
+            'M': '--', 'N': '-.', 'O': '---', 'P': '.--.', 'Q': '--.-', 'R': '.-.',
+            'S': '...', 'T': '-', 'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-',
+            'Y': '-.--', 'Z': '--..', '1': '.----', '2': '..---', '3': '...--',
+            '4': '....-', '5': '.....', '6': '-....', '7': '--...', '8': '---..',
+            '9': '----.', '0': '-----', ' ': '/'
+        };
+
+        function getMorseString(text) {
+            return text.split('').map(char => morseCode[char] || '?').join(' ');
+        }
+
+        function previewMorse() {
+            const input = document.getElementById('encoderInput').value.toUpperCase();
+            const output = document.getElementById('morseOutput');
+            output.value = getMorseString(input);
+        }
+
+        function copyMorse() {
+            const output = document.getElementById('morseOutput');
+            output.select();
+            output.setSelectionRange(0, 99999); // Mobile
+            navigator.clipboard.writeText(output.value).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                const originalText = btn.innerText;
+                btn.innerText = "COPIED!";
+                setTimeout(() => btn.innerText = originalText, 2000);
+            });
+        }
+
+        function playMorseAudio() {
+            initAudio();
+            const text = document.getElementById('encoderInput').value.toUpperCase();
+            if(!text) return;
+
+            let morseSequence = [];
+            for(let char of text) {
+                if(morseCode[char]) {
+                    const code = morseCode[char];
+                    for(let symbol of code) {
+                        morseSequence.push(symbol);
+                    }
+                    morseSequence.push('charGap');
+                } else {
+                    morseSequence.push('wordGap');
+                }
+            }
+            playMorseSequence(morseSequence, 0);
+        }
+
+        function playMorseSequence(sequence, index) {
+            if(index >= sequence.length) return;
+            const symbol = sequence[index];
+            const unit = 80; // Speed of Morse
+
+            if(symbol === '.') {
+                playTone(700); 
+                setTimeout(() => { stopAudio(); setTimeout(() => playMorseSequence(sequence, index+1), unit); }, unit);
+            } else if (symbol === '-') {
+                playTone(700);
+                setTimeout(() => { stopAudio(); setTimeout(() => playMorseSequence(sequence, index+1), unit); }, unit * 3);
+            } else {
+                setTimeout(() => playMorseSequence(sequence, index + 1), unit * 3);
+            }
+        }
+
+        function translateFreq() {
+            const input = document.getElementById('freqInput').value;
+            const log = document.getElementById('decoderLog');
+            // Fake logic for demo
+            const fakeHex = parseInt(input).toString(16).toUpperCase();
+            const timestamp = new Date().toLocaleTimeString();
+            
+            log.innerHTML += `<div style="margin-top:5px; border-bottom:1px solid #333;">
+                <span style="color:#fff">[${timestamp}]</span> 
+                Rx: ${input}Hz <br> 
+                > DATA: 0x${fakeHex} (Signal Strength 9+20db)
+            </div>`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+    </script>
+</body>
+</html>
